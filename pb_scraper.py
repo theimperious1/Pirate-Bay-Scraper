@@ -1,209 +1,110 @@
 import requests
-import re
-from bs4 import BeautifulSoup
+import urllib.parse
 import logging
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# object for torrent site scraper
+# Default trackers used when building magnet links
+DEFAULT_TRACKERS = [
+    'udp://tracker.coppersurfer.tk:6969/announce',
+    'udp://tracker.openbittorrent.com:6969/announce',
+    'udp://tracker.opentrackr.org:1337',
+    'udp://tracker.leechers-paradise.org:6969/announce',
+    'udp://tracker.dler.org:6969/announce',
+    'udp://opentracker.i2p.rocks:6969/announce',
+    'udp://47.ip-51-68-199.eu:6969/announce',
+]
+
+
 class TorrentFinder:
-    # constructor
+    """Scraper that queries the apibay.org JSON API (used by The Pirate Bay)."""
+
     def __init__(self):
-        self.base_domain = 'tprbay.xyz'  # Update the base domain
+        self.api_base = 'https://apibay.org'
 
-    def fetch_html(self, url):
+    # ---- internal helpers ------------------------------------------------
+
+    def _api_search(self, query, cat):
+        """Hit the apibay search endpoint and return the raw JSON list."""
+        url = f'{self.api_base}/q.php?q={urllib.parse.quote_plus(query)}&cat={cat}'
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': (
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                'AppleWebKit/537.36 (KHTML, like Gecko) '
+                'Chrome/120.0.0.0 Safari/537.36'
+            ),
         }
-        response = requests.get(url, headers=headers)
+        logging.debug(f'API request: {url}')
+        response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
-        return response.text
+        return response.json()
 
-    # method to search for torrents on pirate bay
-    def search_hd_movies(self, query):
+    @staticmethod
+    def _format_size(size_bytes):
+        """Return a human-readable size string."""
+        size_bytes = int(size_bytes)
+        for unit in ('B', 'KiB', 'MiB', 'GiB', 'TiB'):
+            if abs(size_bytes) < 1024:
+                return f'{size_bytes:.2f} {unit}'
+            size_bytes /= 1024
+        return f'{size_bytes:.2f} PiB'
+
+    @staticmethod
+    def _build_magnet(info_hash, name):
+        """Construct a magnet URI from an info-hash and display name."""
+        params = {'xt': f'urn:btih:{info_hash}', 'dn': name}
+        tracker_params = ''.join(
+            f'&tr={urllib.parse.quote_plus(t)}' for t in DEFAULT_TRACKERS
+        )
+        return f'magnet:?{urllib.parse.urlencode(params)}{tracker_params}'
+
+    def _search(self, query, cat, label):
+        """Generic search that converts API JSON into the result dicts."""
         try:
-            url = f'https://{self.base_domain}/search/{query}/1/99/207'
-            logging.info(f'Searching HD movies with query: {query}')
-            html = self.fetch_html(url)
-            logging.debug(f'HTML content: {html[:500]}')  # Log the first 500 characters of the HTML content
-            soup = BeautifulSoup(html, 'html.parser')
+            logging.info(f'Searching {label} with query: {query}')
+            items = self._api_search(query, cat)
+
+            # The API returns [{"id":"0","name":"No results ..."}] when empty
+            if not items or (len(items) == 1 and items[0].get('id') == '0'):
+                logging.info('No results found.')
+                return []
 
             results = []
-            for trs in soup.find_all('tr'):
-                tds = trs.find_all('td')
+            for item in items:
+                result = {
+                    'title': item.get('name', ''),
+                    'magnet': self._build_magnet(item['info_hash'], item['name']),
+                    'size': self._format_size(item.get('size', 0)),
+                    'seeders': item.get('seeders', '0'),
+                    'leechers': item.get('leechers', '0'),
+                }
+                results.append(result)
 
-                if len(tds) > 1:
-                    logging.debug(f'Table row content: {tds}')
-                    # Find the link tag containing the magnet link
-                    magnet_link_tag = tds[1].find('a', href=True, title="Download this torrent using magnet")
-
-                    if magnet_link_tag:
-                        magnet = magnet_link_tag['href']
-                    else:
-                        magnet = None
-
-                    title_tag = tds[1].find('a', class_='detLink')
-                    if title_tag:
-                        title = title_tag.get('title', '').replace('Details for ', '')
-                    else:
-                        title = None
-
-                    size_match = re.search(r'(?<=Size )(.*)(?=,)', str(tds[1]))
-                    size = size_match.group(0) if size_match else None
-
-                    seeders = tds[2].text if len(tds) > 2 else None
-                    leechers = tds[3].text if len(tds) > 3 else None
-
-                    result = {'title': title, 'magnet': magnet, 'size': size, 'seeders': seeders, 'leechers': leechers}
-                    result = {key: value.replace('\xa0', ' ') if value else value for key, value in result.items()}
-                    results.append(result)
-
+            logging.info(f'Found {len(results)} result(s).')
             return results
+
         except requests.exceptions.RequestException as e:
             logging.error(f'Network error occurred: {e}', exc_info=True)
             return []
         except Exception as e:
-            logging.error(f'Error occurred while searching HD movies: {e}', exc_info=True)
+            logging.error(f'Error occurred while searching {label}: {e}', exc_info=True)
             return []
+
+    # ---- public API (same interface as before) ---------------------------
+
+    def search_hd_movies(self, query):
+        return self._search(query, cat=207, label='HD movies')
 
     def search_movies(self, query):
-        try:
-            url = f'https://{self.base_domain}/search/{query}/1/99/201'
-            logging.info(f'Searching movies with query: {query}')
-            html = self.fetch_html(url)
-            logging.debug(f'HTML content: {html[:500]}')
-            soup = BeautifulSoup(html, 'html.parser')
-
-            results = []
-            for trs in soup.find_all('tr'):
-                tds = trs.find_all('td')
-
-                if len(tds) > 1:
-                    logging.debug(f'Table row content: {tds}')
-                    # Find the link tag containing the magnet link
-                    magnet_link_tag = tds[1].find('a', href=True, title="Download this torrent using magnet")
-
-                    if magnet_link_tag:
-                        magnet = magnet_link_tag['href']
-                    else:
-                        magnet = None
-
-                    title_tag = tds[1].find('a', class_='detLink')
-                    if title_tag:
-                        title = title_tag.get('title', '').replace('Details for ', '')
-                    else:
-                        title = None
-
-                    size_match = re.search(r'(?<=Size )(.*)(?=,)', str(tds[1]))
-                    size = size_match.group(0) if size_match else None
-
-                    seeders = tds[2].text if len(tds) > 2 else None
-                    leechers = tds[3].text if len(tds) > 3 else None
-
-                    result = {'title': title, 'magnet': magnet, 'size': size, 'seeders': seeders, 'leechers': leechers}
-                    result = {key: value.replace('\xa0', ' ') if value else value for key, value in result.items()}
-                    results.append(result)
-
-            return results
-        except requests.exceptions.RequestException as e:
-            logging.error(f'Network error occurred: {e}', exc_info=True)
-            return []
-        except Exception as e:
-            logging.error(f'Error occurred while searching movies: {e}', exc_info=True)
-            return []
+        return self._search(query, cat=201, label='movies')
 
     def search_hd_tv_shows(self, query):
-        try:
-            url = f'https://{self.base_domain}/search/{query}/1/99/208'
-            logging.info(f'Searching HD TV shows with query: {query}')
-            html = self.fetch_html(url)
-            logging.debug(f'HTML content: {html[:500]}')
-            soup = BeautifulSoup(html, 'html.parser')
-
-            results = []
-            for trs in soup.find_all('tr'):
-                tds = trs.find_all('td')
-
-                if len(tds) > 1:
-                    logging.debug(f'Table row content: {tds}')
-                    # Find the link tag containing the magnet link
-                    magnet_link_tag = tds[1].find('a', href=True, title="Download this torrent using magnet")
-
-                    if magnet_link_tag:
-                        magnet = magnet_link_tag['href']
-                    else:
-                        magnet = None
-
-                    title_tag = tds[1].find('a', class_='detLink')
-                    if title_tag:
-                        title = title_tag.get('title', '').replace('Details for ', '')
-                    else:
-                        title = None
-
-                    size_match = re.search(r'(?<=Size )(.*)(?=,)', str(tds[1]))
-                    size = size_match.group(0) if size_match else None
-
-                    seeders = tds[2].text if len(tds) > 2 else None
-                    leechers = tds[3].text if len(tds) > 3 else None
-
-                    result = {'title': title, 'magnet': magnet, 'size': size, 'seeders': seeders, 'leechers': leechers}
-                    result = {key: value.replace('\xa0', ' ') if value else value for key, value in result.items()}
-                    results.append(result)
-
-            return results
-        except requests.exceptions.RequestException as e:
-            logging.error(f'Network error occurred: {e}', exc_info=True)
-            return []
-        except Exception as e:
-            logging.error(f'Error occurred while searching HD TV shows: {e}', exc_info=True)
-            return []
+        return self._search(query, cat=208, label='HD TV shows')
 
     def search_tv_shows(self, query):
-        try:
-            url = f'https://{self.base_domain}/search/{query}/1/99/205'
-            logging.info(f'Searching TV shows with query: {query}')
-            html = self.fetch_html(url)
-            logging.debug(f'HTML content: {html[:500]}')
-            soup = BeautifulSoup(html, 'html.parser')
+        return self._search(query, cat=205, label='TV shows')
 
-            results = []
-            for trs in soup.find_all('tr'):
-                tds = trs.find_all('td')
-
-                if len(tds) > 1:
-                    logging.debug(f'Table row content: {tds}')
-                    # Find the link tag containing the magnet link
-                    magnet_link_tag = tds[1].find('a', href=True, title="Download this torrent using magnet")
-
-                    if magnet_link_tag:
-                        magnet = magnet_link_tag['href']
-                    else:
-                        magnet = None
-
-                    title_tag = tds[1].find('a', class_='detLink')
-                    if title_tag:
-                        title = title_tag.get('title', '').replace('Details for ', '')
-                    else:
-                        title = None
-
-                    size_match = re.search(r'(?<=Size )(.*)(?=,)', str(tds[1]))
-                    size = size_match.group(0) if size_match else None
-
-                    seeders = tds[2].text if len(tds) > 2 else None
-                    leechers = tds[3].text if len(tds) > 3 else None
-
-                    result = {'title': title, 'magnet': magnet, 'size': size, 'seeders': seeders, 'leechers': leechers}
-                    result = {key: value.replace('\xa0', ' ') if value else value for key, value in result.items()}
-                    results.append(result)
-
-            return results
-        except requests.exceptions.RequestException as e:
-            logging.error(f'Network error occurred: {e}', exc_info=True)
-            return []
-        except Exception as e:
-            logging.error(f'Error occurred while searching TV shows: {e}', exc_info=True)
-            return []
 
 if __name__ == '__main__':
     query = "Batman"

@@ -1,11 +1,11 @@
-# Inside your python file import the scraper
-from pb_scraper import TorrentFinder
+# Inside your python file import the TorrentFinder
+from torrent_finder import TorrentFinder
 
 # then create an instance of the object
-scrape = TorrentFinder()
+finder = TorrentFinder()
 
-# and then you can use the search_pirate_bay method to scrape the data
-data = scrape.search_hd_tv_shows('fallout') # Replace batman for desired SEARCH TERM
+# use one of the search methods to find torrents
+data = finder.search_hd_tv_shows('fallout')  # Replace 'fallout' with desired search term
 
 # the raw data is a list of dictionaries with the following keys: title, magnet, size, seeders, leechers
 

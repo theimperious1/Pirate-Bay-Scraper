@@ -18,7 +18,7 @@ DEFAULT_TRACKERS = [
 
 
 class TorrentFinder:
-    """Scraper that queries the apibay.org JSON API (used by The Pirate Bay)."""
+    """Queries the apibay.org JSON API (used by The Pirate Bay) to find torrents."""
 
     def __init__(self):
         self.api_base = 'https://apibay.org'
@@ -109,7 +109,7 @@ class TorrentFinder:
 if __name__ == '__main__':
     query = "Batman"
 
-    scraper = TorrentFinder()
-    res = scraper.search_hd_movies(query)
+    finder = TorrentFinder()
+    res = finder.search_hd_movies(query)
 
     print(res)

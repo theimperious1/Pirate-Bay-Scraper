@@ -1,33 +1,32 @@
-# OOP-Pirate-Bay-Scraper
-An Object Oriented scraper that searches piratebay.live for torrents and returns a list of dictionaries with filenames, filesize, magnets, seeds, leechers.
-
-If piratebay.live is not working you can change the base url to a dfferent pirate bay server in `pb_scraper.py` on line 14     
-`url = 'https://piratebay.live/search/' + query + '/1/99/0'`        
-Make sure to leave the `/search/` at the end of the new url.        
-    example:     
-    `url = 'https://newserver.pb/search/' + query + '/1/99/0'`      
+# Pirate-Bay-Torrent-Finder
+A Python tool that searches The Pirate Bay for torrents using the apibay.org JSON API and returns a list of dictionaries with filenames, filesize, magnets, seeds, and leechers.
 
 ## Modules required:
 1. requests
-1. re
-1. bs4
 
 ## How to use?
-First, clone this repository, then install the required modules with pip.       
-    `git clone https://github.com/00-Python/OOP-Pirate-Bay-Scraper.git`   
-    `cd OOP-Pirate-Bay-Scraper`  
-    `pip install requests re beautifulsoup4`
-
-Once you have installed the modules you can create a blank python file i.e. torrents.py 
+First, clone this repository, then install the required modules with pip.
 ```
-# Inside your python file import the the scraper
-from pb_scraper import TorrentFinder
+git clone https://github.com/00-Python/Pirate-Bay-Scraper.git
+cd Pirate-Bay-Scraper
+pip install requests
+```
+
+Once you have installed the module you can create a blank python file, e.g. `torrents.py`:
+```python
+# Inside your python file import the TorrentFinder
+from torrent_finder import TorrentFinder
 
 # then create an instance of the object
-scrape = TorrentFinder()
+finder = TorrentFinder()
 
-# and then you can use the search_pirate_bay method to scrape the data
-data = scrape.search_pirate_bay('batman') # Replace batman for desired SEARCH TERM
+# search methods available:
+#   search_hd_movies(query)   - HD Movies (cat 207)
+#   search_movies(query)      - Movies (cat 201)
+#   search_hd_tv_shows(query) - HD TV Shows (cat 208)
+#   search_tv_shows(query)    - TV Shows (cat 205)
+
+data = finder.search_hd_movies('batman')  # Replace 'batman' with desired search term
 
 # the raw data is a list of dictionaries with the following keys: title, magnet, size, seeders, leechers
 
@@ -43,33 +42,22 @@ for result in data:
 
 # view data raw
 print(data)
-
 ```
 
 An example output searching for 'batman' would be:
 ```
 Title: The Batman (2022) [1080p] [WEBRip] [5.1]
-Magnet: magnet:?xt=urn:vsjdkbjlk;nvbksbdjacsjcldvbjldpnklmb
+Magnet: magnet:?xt=urn:btih:ABC123...&dn=The+Batman+...&tr=udp://tracker...
 Size: 3.25 GiB
 Seeders: 995
 Leechers: 150
 
 ____________________________________________________
-Title: Batman.The.Doom.That.Came.to.Gotham.2023.720p.WEBRip.800MB.x264-
-Magnet: magnet:?xt=usnkdsbn,sdbvklsnvfb
+Title: Batman.The.Doom.That.Came.to.Gotham.2023.720p.WEBRip.800MB.x264
+Magnet: magnet:?xt=urn:btih:DEF456...&dn=Batman...&tr=udp://tracker...
 Size: 796.92 MiB
 Seeders: 811
 Leechers: 37
 
 ____________________________________________________
-Title: The Batman (2022) 1080p HDRip x264 - ProLover
-Magnet: magnet:?xt=urn:btvhkdjblvksn;svbjlkn;cm'dvn;kbsdnk;
-Size: 1.19 GiB
-Seeders: 691
-Leechers: 87
-
-____________________________________________________
-
-
-[{'title': 'The Batman (2022) [1080p] [WEBRip] [5.1]', 'magnet': 'magnet:?xt=urn:vsjdkbjlk;nvbksbdjacsjcldvbjldpnklmb', 'size': '3.25 GiB', 'seeders': '936', 'leechers': '158'}, {'title': 'Batman.The.Doom.That.Came.to.Gotham.2023.720p.WEBRip.800MB.x264-', 'magnet': 'magnet:?xt=usnkdsbn,sdbvklsnvfb', 'size': '796.92 MiB', 'seeders': '721', 'leechers': '32'}, {'title': 'The Batman (2022) 1080p HDRip x264 - ProLover', 'magnet': 'agnet:?xt=urn:btvhkdjblvksn;svbjlkn;cm'dvn;kbsdnk;', 'size': '1.19 GiB', 'seeders': '640', 'leechers': '83'}]
 ```
